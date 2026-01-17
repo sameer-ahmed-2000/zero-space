@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --dir .",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch"
@@ -41,10 +41,5 @@
     "@testing-library/react": "^16.1.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "next lint"
-    ]
   }
 }
