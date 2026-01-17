@@ -15,10 +15,13 @@ import EditorMenus from '../components/EditorMenus'
 import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
-import { TocItem } from '../types'
+import { Page, TocItem } from '../types'
 
 // Initialize lowlight for syntax highlighting
 const lowlight = createLowlight(common)
+
+// Default page icons
+const DEFAULT_ICONS = ['📄', '📝', '📋', '📑', '📓', '📔', '📕', '📗', '📘', '📙']
 
 export default function NotionEditor() {
   const [mounted, setMounted] = useState(false)
@@ -27,7 +30,11 @@ export default function NotionEditor() {
   const [tocOpen, setTocOpen] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [darkMode, setDarkMode] = useState(false)
-  const [pageTitle, setPageTitle] = useState('Untitled')
+
+  // Multi-page state
+  const [pages, setPages] = useState<Page[]>([])
+  const [currentPageId, setCurrentPageId] = useState<string>('')
+
   const editorRef = useRef<any>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
 
@@ -47,15 +54,7 @@ export default function NotionEditor() {
         if (!id) {
           id = `heading-${Math.random().toString(36).slice(2, 9)}`
 
-          // We need to set the selection to update the specific node
-          // This might cause cursor jumps if typing, but essential for first ID generation
           if (editor.isEditable) {
-            // Use a transaction to avoid multiple history steps or jumps if possible
-            // But setNodeSelection is standard for commands
-            // We wrap in a check to avoid unnecessary updates if possible, 
-            // but here we know !id.
-
-            // Note: queuing this might be better but let's stick to synchronous for stability
             editor.commands.setNodeSelection(pos)
             editor.commands.updateAttributes('heading', { id })
           }
@@ -131,8 +130,18 @@ export default function NotionEditor() {
       },
     },
     onUpdate: ({ editor }) => {
+      if (!currentPageId) return
+
       const json = editor.getJSON()
-      localStorage.setItem('notion-editor-content', JSON.stringify(json))
+
+      // Update current page content
+      setPages(prevPages =>
+        prevPages.map(page =>
+          page.id === currentPageId
+            ? { ...page, content: JSON.stringify(json), updatedAt: Date.now() }
+            : page
+        )
+      )
 
       // Store editor in ref and extract headings
       editorRef.current = editor
@@ -144,40 +153,101 @@ export default function NotionEditor() {
     },
   })
 
-  // Load content from localStorage
+  // Generate unique ID
+  const generateId = () => {
+    return `page-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  }
+
+  // Create initial page if none exist
+  const createInitialPage = () => {
+    const initialPage: Page = {
+      id: generateId(),
+      title: 'Untitled',
+      icon: '',
+      content: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    setPages([initialPage])
+    setCurrentPageId(initialPage.id)
+  }
+
+  // Initialize pages from localStorage
   useEffect(() => {
     setMounted(true)
 
-    if (editor) {
-      const savedContent = localStorage.getItem('notion-editor-content')
-      if (savedContent) {
-        try {
-          const json = JSON.parse(savedContent)
-          editor.commands.setContent(json)
+    const savedPages = localStorage.getItem('zero-space-pages')
+    const savedCurrentPageId = localStorage.getItem('zero-space-current-page')
 
-          // Extract headings after content loads
-          setTimeout(() => {
-            extractHeadings()
-          }, 100)
-        } catch (e) {
-          console.error('Failed to load saved content:', e)
+    if (savedPages) {
+      try {
+        const parsedPages: Page[] = JSON.parse(savedPages)
+        setPages(parsedPages)
+
+        if (savedCurrentPageId && parsedPages.find(p => p.id === savedCurrentPageId)) {
+          setCurrentPageId(savedCurrentPageId)
+        } else if (parsedPages.length > 0) {
+          setCurrentPageId(parsedPages[0].id)
         }
+      } catch (e) {
+        console.error('Failed to load pages:', e)
+        createInitialPage()
       }
-    }
-
-    // Load saved title
-    const savedTitle = localStorage.getItem('notion-page-title')
-    if (savedTitle) {
-      setPageTitle(savedTitle)
+    } else {
+      createInitialPage()
     }
 
     // Load dark mode preference
-    const savedDarkMode = localStorage.getItem('notion-dark-mode')
+    const savedDarkMode = localStorage.getItem('zero-space-dark-mode')
     if (savedDarkMode === 'true') {
       setDarkMode(true)
       document.documentElement.classList.add('dark')
     }
-  }, [editor])
+  }, [])
+
+  // Save pages to localStorage whenever they change
+  useEffect(() => {
+    if (pages.length > 0) {
+      localStorage.setItem('zero-space-pages', JSON.stringify(pages))
+    }
+  }, [pages])
+
+  // Save current page ID
+  useEffect(() => {
+    if (currentPageId) {
+      localStorage.setItem('zero-space-current-page', currentPageId)
+    }
+  }, [currentPageId])
+
+  // Load current page content into editor
+  useEffect(() => {
+    if (!editor || !currentPageId) return
+
+    const currentPage = pages.find(p => p.id === currentPageId)
+    if (!currentPage) return
+
+    try {
+      if (currentPage.content) {
+        const json = JSON.parse(currentPage.content)
+        editor.commands.setContent(json)
+      } else {
+        editor.commands.setContent('')
+      }
+
+      // Extract headings after content loads
+      setTimeout(() => {
+        extractHeadings()
+      }, 100)
+    } catch (e) {
+      console.error('Failed to load page content:', e)
+    }
+  }, [editor, currentPageId, pages])
+
+  // Update document title
+  useEffect(() => {
+    const currentPage = pages.find(p => p.id === currentPageId)
+    document.title = currentPage?.title || 'Untitled'
+  }, [currentPageId, pages])
 
   // Track active heading on scroll
   useEffect(() => {
@@ -186,13 +256,10 @@ export default function NotionEditor() {
       if (!wrapper) return
 
       const headingElements = document.querySelectorAll('.tiptap-editor h1, .tiptap-editor h2, .tiptap-editor h3')
-      // Adjusted calculation for container scroll
       const scrollPosition = wrapper.scrollTop + 100
 
       for (let i = headingElements.length - 1; i >= 0; i--) {
         const heading = headingElements[i] as HTMLElement
-        // If wrapper is offsetParent, heading.offsetTop works.
-        // If not, we might need adjustments, but let's assume default works for now.
         if (heading.offsetTop <= scrollPosition) {
           setActiveId(heading.id || '')
           break
@@ -207,6 +274,52 @@ export default function NotionEditor() {
       return () => wrapper.removeEventListener('scroll', handleScroll)
     }
   }, [tocItems])
+
+  // Handle new page creation
+  const handleNewPage = () => {
+    const newPage: Page = {
+      id: generateId(),
+      title: 'Untitled',
+      icon: '',
+      content: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    setPages(prevPages => [...prevPages, newPage])
+    setCurrentPageId(newPage.id)
+  }
+
+  // Handle page selection
+  const handlePageSelect = (pageId: string) => {
+    setCurrentPageId(pageId)
+  }
+
+  // Handle page deletion
+  const handleDeletePage = (pageId: string) => {
+    setPages(prevPages => {
+      const newPages = prevPages.filter(p => p.id !== pageId)
+
+      // If deleting current page, switch to another
+      if (pageId === currentPageId && newPages.length > 0) {
+        setCurrentPageId(newPages[0].id)
+      }
+
+      return newPages
+    })
+  }
+
+  // Handle page title change
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value
+    setPages(prevPages =>
+      prevPages.map(page =>
+        page.id === currentPageId
+          ? { ...page, title: newTitle, updatedAt: Date.now() }
+          : page
+      )
+    )
+  }
 
   // Handle TOC item click
   const handleTocClick = (id: string) => {
@@ -243,7 +356,13 @@ export default function NotionEditor() {
   const handleClear = () => {
     if (confirm('Are you sure you want to clear all content? This cannot be undone.')) {
       editor?.commands.clearContent()
-      localStorage.removeItem('notion-editor-content')
+      setPages(prevPages =>
+        prevPages.map(page =>
+          page.id === currentPageId
+            ? { ...page, content: '', updatedAt: Date.now() }
+            : page
+        )
+      )
     }
   }
 
@@ -251,7 +370,7 @@ export default function NotionEditor() {
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode
     setDarkMode(newDarkMode)
-    localStorage.setItem('notion-dark-mode', String(newDarkMode))
+    localStorage.setItem('zero-space-dark-mode', String(newDarkMode))
 
     if (newDarkMode) {
       document.documentElement.classList.add('dark')
@@ -259,18 +378,6 @@ export default function NotionEditor() {
       document.documentElement.classList.remove('dark')
     }
   }
-
-  // Save page title
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value
-    setPageTitle(newTitle)
-    localStorage.setItem('notion-page-title', newTitle)
-  }
-
-  // Update document title
-  useEffect(() => {
-    document.title = pageTitle || 'Untitled'
-  }, [pageTitle])
 
   if (!mounted || !editor) {
     return (
@@ -280,6 +387,8 @@ export default function NotionEditor() {
       </div>
     )
   }
+
+  const currentPage = pages.find(p => p.id === currentPageId)
 
   return (
     <div className={`app-container ${darkMode ? 'dark' : ''}`}>
@@ -297,6 +406,11 @@ export default function NotionEditor() {
         toggle={() => setSidebarOpen(!sidebarOpen)}
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
+        pages={pages}
+        currentPageId={currentPageId}
+        onPageSelect={handlePageSelect}
+        onNewPage={handleNewPage}
+        onDeletePage={handleDeletePage}
       />
 
       {/* Main Content */}
@@ -315,12 +429,12 @@ export default function NotionEditor() {
           <div className="editor-container">
             {/* Page Icon & Title */}
             <div className="page-header">
-              <div className="page-icon">📄</div>
+              {currentPage?.icon && <div className="page-icon">{currentPage.icon}</div>}
               <input
                 type="text"
-                className="page-title"
+                className="editor-page-title"
                 placeholder="Untitled"
-                value={pageTitle}
+                value={currentPage?.title || ''}
                 onChange={handleTitleChange}
               />
             </div>
