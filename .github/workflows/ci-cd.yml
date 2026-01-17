@@ -23,10 +23,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './zero-space/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./zero-space
         run: npm ci
 
       - name: Cache dependencies
@@ -34,8 +32,8 @@ jobs:
         with:
           path: |
             ~/.npm
-            zero-space/node_modules
-            zero-space/.next/cache
+            node_modules
+            .next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-
@@ -53,18 +51,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './zero-space/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./zero-space
         run: npm ci
 
       - name: Run ESLint
-        working-directory: ./zero-space
         run: npm run lint
 
       - name: Run Prettier check
-        working-directory: ./zero-space
         run: npx prettier --check .
 
   # Type checking
@@ -80,14 +74,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './zero-space/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./zero-space
         run: npm ci
 
       - name: Run TypeScript check
-        working-directory: ./zero-space
         run: npm run type-check || npx tsc --noEmit
 
   # Run tests
@@ -103,20 +94,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './zero-space/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./zero-space
         run: npm ci
 
       - name: Run tests
-        working-directory: ./zero-space
         run: npm test -- --coverage
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
         with:
-          files: ./zero-space/coverage/coverage-final.json
+          files: ./coverage/coverage-final.json
           flags: unittests
           name: codecov-umbrella
 
@@ -133,14 +121,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './zero-space/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./zero-space
         run: npm ci
 
       - name: Build Next.js application
-        working-directory: ./zero-space
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
@@ -149,7 +134,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: nextjs-build
-          path: ./zero-space/.next
+          path: .next
           retention-days: 7
 
   # Deploy to Vercel (Production)
@@ -203,7 +188,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: nextjs-build
-          path: ./zero-space/.next
+          path: .next
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@master
