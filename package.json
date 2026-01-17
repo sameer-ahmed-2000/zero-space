@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --dir .",
+    "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch"
@@ -40,6 +40,8 @@
     "ts-node": "^10.9.2",
     "@testing-library/react": "^16.1.0",
     "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.3"
+    "@testing-library/jest-dom": "^6.6.3",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "16.1.2"
   }
 }
