@@ -1,36 +1,157 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# My Notion - WYSIWYG Markdown Editor
+
+A high-performance, Notion-style WYSIWYG Markdown editor built with Next.js and TipTap. Features instant Markdown transformation, file imports for large documents, and professional PDF export capabilities.
+
+## Features
+
+✨ **WYSIWYG Editing** - Single-view editor with no edit/preview toggle  
+📝 **Instant Markdown Transformation** - Paste raw Markdown and watch it transform into styled blocks  
+⌨️ **Markdown Shortcuts** - Type `### ` for headings, `- ` for lists, `> ` for blockquotes  
+🎨 **Syntax Highlighting** - GitHub-style light theme for code blocks  
+📁 **Large File Import** - Import `.md` and `.txt` files (bypasses clipboard limits)  
+📄 **Professional PDF Export** - One-click export with smart page breaks  
+💾 **Auto-Save** - Content automatically saved to localStorage  
+🎯 **Contextual Menus** - Bubble menu for text formatting, floating menu for block types
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router)
+- **Editor:** TipTap (React)
+- **Styling:** Tailwind CSS 4
+- **Icons:** Lucide React
+- **Syntax Highlighting:** Lowlight
+- **Markdown:** tiptap-markdown
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
+
+1. Navigate to the project directory:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd zero-space
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Start the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+### Markdown Shortcuts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+While typing in an empty paragraph, use these shortcuts:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `# ` + Space → Heading 1
+- `## ` + Space → Heading 2
+- `### ` + Space → Heading 3
+- `- ` + Space → Bullet List
+- `1. ` + Space → Numbered List
+- `> ` + Space → Blockquote
+- ` ``` ` + Space → Code Block
 
-## Deploy on Vercel
+### Text Formatting
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Select text to reveal the bubble menu with options for:
+- **Bold** (Ctrl/Cmd + B)
+- *Italic* (Ctrl/Cmd + I)
+- ~~Strikethrough~~
+- `Inline Code`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Importing Files
+
+Click the **Import MD** button in the toolbar to import Markdown or text files. The content will be appended to the end of your document. This feature is perfect for importing large notes that exceed clipboard limits.
+
+### Exporting to PDF
+
+Click the **Export PDF** button to open the print dialog. The export includes:
+- Clean, professional formatting
+- Hidden UI elements (toolbars, menus, decorative images)
+- Smart page breaks (code blocks won't split across pages)
+- Proper syntax highlighting in code blocks
+
+### Clearing Content
+
+Click the **Clear** button to wipe all content. You'll be asked to confirm this action as it cannot be undone.
+
+## Code Blocks
+
+Create code blocks and enjoy GitHub-style syntax highlighting:
+
+\`\`\`javascript
+function hello() {
+  console.log('Hello, Notion!')
+}
+\`\`\`
+
+Supported languages include JavaScript, TypeScript, Python, Java, C++, and many more.
+
+## Auto-Save
+
+Your content is automatically saved to localStorage with every change. Refresh the page and your work will be restored.
+
+## Project Structure
+
+```
+mynotion/
+├── src/
+│   └── app/
+│       ├── globals.css      # Complete styling including print CSS
+│       ├── layout.tsx        # Root layout with Inter font
+│       └── page.tsx          # Main editor component
+├── package.json
+└── README.md
+```
+
+## Customization
+
+### Changing Colors
+
+Edit `src/app/globals.css` to customize:
+- **Cover gradient:** `.cover-image` background
+- **Code block background:** `.tiptap pre` background color
+- **Inline code color:** `.tiptap code` color
+- **Toolbar style:** `.toolbar` properties
+
+### Adding New Block Types
+
+Extend the FloatingMenu in `src/app/page.tsx` to add more block options:
+
+```typescript
+<button
+  onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+  title="Heading 3"
+>
+  <Heading3 size={18} />
+</button>
+```
+
+## Browser Support
+
+- Chrome/Edge (latest)
+- Firefox (latest)
+- Safari (latest)
+
+## License
+
+MIT
+
+## Contributing
+
+Feel free to submit issues and enhancement requests!
+
+---
+
+Built with ❤️ using Next.js and TipTap
