@@ -2,6 +2,7 @@
 
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Heading from '@tiptap/extension-heading'
+import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Placeholder from '@tiptap/extension-placeholder'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -13,8 +14,10 @@ import { Markdown } from 'tiptap-markdown'
 import CodeBlockComponent from '../components/CodeBlockComponent'
 import EditorMenus from '../components/EditorMenus'
 import Sidebar from '../components/Sidebar'
+import { SlashMenu } from '../components/SlashMenu'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
+import { useSlashCommands } from '../hooks/useSlashCommands'
 import { Page, TocItem } from '../types'
 
 // Initialize lowlight for syntax highlighting
@@ -122,6 +125,7 @@ export default function NotionEditor() {
         lowlight,
         defaultLanguage: 'javascript',
       }),
+      HorizontalRule,
     ],
     content: '',
     editorProps: {
@@ -152,6 +156,9 @@ export default function NotionEditor() {
       editorRef.current = editor
     },
   })
+
+  // Slash commands (must be after editor)
+  const slashCommands = useSlashCommands({ editor })
 
   // Generate unique ID
   const generateId = () => {
@@ -461,6 +468,19 @@ export default function NotionEditor() {
       >
         <List size={20} />
       </button>
+
+      {/* Slash Commands Menu */}
+      {slashCommands.isOpen && (
+        <SlashMenu
+          commands={slashCommands.commands}
+          selectedIndex={slashCommands.selectedIndex}
+          position={slashCommands.position}
+          onSelect={(index) => {
+            slashCommands.setSelectedIndex(index)
+            slashCommands.executeCommand(slashCommands.commands[index])
+          }}
+        />
+      )}
     </div>
   )
 }
