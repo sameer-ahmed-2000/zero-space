@@ -1,5 +1,6 @@
 import { Page } from '@/types'
 import { Moon, Plus, Search, Settings, Sun, Trash2, X } from 'lucide-react'
+import { memo } from 'react'
 
 interface SidebarProps {
     isOpen: boolean
@@ -13,7 +14,7 @@ interface SidebarProps {
     onDeletePage: (pageId: string) => void
 }
 
-export default function Sidebar({
+function Sidebar({
     isOpen,
     toggle,
     darkMode,
@@ -98,3 +99,5 @@ export default function Sidebar({
         </aside>
     )
 }
+
+export default memo(Sidebar)

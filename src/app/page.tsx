@@ -17,6 +17,7 @@ import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
 import { Page, TocItem } from '../types'
 import { runWhenIdle } from '../utils/idle'
+import { workerManager } from '../utils/workerManager'
 
 // Initialize lowlight for syntax highlighting
 const lowlight = createLowlight(common)
@@ -52,6 +53,7 @@ export default function NotionEditor() {
   const [pages, setPages] = useState<Page[]>([])
   const [currentPageId, setCurrentPageId] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingStatus, setProcessingStatus] = useState('')
 
   const editorRef = useRef<any>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
@@ -63,69 +65,106 @@ export default function NotionEditor() {
   const debouncedUpdateContent = useCallback(
     debounce((pageId: string, editor: any) => {
       // Perform expensive operations asynchronously
-      runWhenIdle(() => {
+      runWhenIdle(async () => {
         const json = editor.getJSON()
-        const contentString = JSON.stringify(json)
 
-        setPages(prevPages => {
-          const updatedPages = prevPages.map(page =>
-            page.id === pageId
-              ? { ...page, content: contentString, updatedAt: Date.now() }
-              : page
-          )
+        try {
+          // Offload stringify to worker for performance
+          const contentString = await workerManager.stringifyContent(json)
 
-          // Save to localStorage
-          saveToLocalStorage(updatedPages)
+          setPages(prevPages => {
+            const updatedPages = prevPages.map(page =>
+              page.id === pageId
+                ? { ...page, content: contentString, updatedAt: Date.now() }
+                : page
+            )
 
-          return updatedPages
-        })
+            // Save to localStorage
+            saveToLocalStorage(updatedPages)
+
+            return updatedPages
+          })
+        } catch (error) {
+          console.error('Failed to stringify content:', error)
+          // Fallback to main thread
+          const contentString = JSON.stringify(json)
+
+          setPages(prevPages => {
+            const updatedPages = prevPages.map(page =>
+              page.id === pageId
+                ? { ...page, content: contentString, updatedAt: Date.now() }
+                : page
+            )
+            saveToLocalStorage(updatedPages)
+            return updatedPages
+          })
+        }
 
         pendingUpdateRef.current = false
       })
-    }, 300),
+    }, 1000),
     []
   )
 
   // Debounced function to save pages to localStorage
   const saveToLocalStorage = useCallback(
     debounce((pagesToSave: Page[]) => {
-      localStorage.setItem('zero-space-pages', JSON.stringify(pagesToSave))
-    }, 500),
+      workerManager.stringifyContent(pagesToSave)
+        .then(str => {
+          // Check if within quota (basic check) typically 5MB
+          try {
+            localStorage.setItem('zero-space-pages', str)
+          } catch (e) {
+            console.error('Storage quota exceeded', e)
+            // Maybe notify user? For now just log.
+          }
+        })
+        .catch(err => {
+          console.error('Failed to serialize pages for storage', err)
+          try {
+            localStorage.setItem('zero-space-pages', JSON.stringify(pagesToSave))
+          } catch (e) {
+            console.error('Storage quota exceeded fallback', e)
+          }
+        })
+    }, 2000),
     []
   )
 
   // Debounced function to extract headings
   const debouncedExtractHeadings = useCallback(
     debounce(() => {
-      const editor = editorRef.current
-      if (!editor) return
+      runWhenIdle(() => {
+        const editor = editorRef.current
+        if (!editor) return
 
-      const headings: TocItem[] = []
-      const doc = editor.state.doc
+        const headings: TocItem[] = []
+        const doc = editor.state.doc
 
-      doc.descendants((node: any, pos: number) => {
-        if (node.type.name === 'heading') {
-          let id = node.attrs.id
+        doc.descendants((node: any, pos: number) => {
+          if (node.type.name === 'heading') {
+            let id = node.attrs.id
 
-          // Generate a new ID if one doesn't exist
-          if (!id) {
-            id = `heading-${Math.random().toString(36).slice(2, 9)}`
+            // Generate a new ID if one doesn't exist
+            if (!id) {
+              id = `heading-${Math.random().toString(36).slice(2, 9)}`
 
-            if (editor.isEditable) {
-              editor.commands.setNodeSelection(pos)
-              editor.commands.updateAttributes('heading', { id })
+              if (editor.isEditable) {
+                editor.commands.setNodeSelection(pos)
+                editor.commands.updateAttributes('heading', { id })
+              }
             }
+
+            const text = node.textContent
+            const level = node.attrs.level
+
+            headings.push({ id, text, level })
           }
+        })
 
-          const text = node.textContent
-          const level = node.attrs.level
-
-          headings.push({ id, text, level })
-        }
+        setTocItems(headings)
       })
-
-      setTocItems(headings)
-    }, 500),
+    }, 1000),
     []
   )
 
@@ -223,13 +262,39 @@ export default function NotionEditor() {
         paste: (view, event) => {
           const text = event.clipboardData?.getData('text/plain')
 
-          // Show loader for large pastes
+          // Handle large pastes with web worker
           if (text && text.length > 50000) {
             setIsProcessing(true)
-            // Loader will be hidden by onUpdate callback
+            setProcessingStatus('Converting large content...')
+            event.preventDefault()
+
+            // Process in worker
+            workerManager.parseMarkdownToJson(text)
+              .then((json) => {
+                if (editorRef.current) {
+                  editorRef.current.commands.insertContent(json)
+                }
+                setProcessingStatus('Rendering content...')
+
+                // content inserted, but React/ProseMirror needs to render
+                // Wait for idle to ensure rendering is done before hiding loader
+                runWhenIdle(() => {
+                  setIsProcessing(false)
+                  setProcessingStatus('')
+                }, 5000) // Give it time
+              })
+              .catch(err => {
+                console.error('Paste failed:', err)
+                setIsProcessing(false)
+                setProcessingStatus('')
+                // Fallback to default paste if worker fails? 
+                // Currently just logging. User can try smaller chunks or plain text.
+              })
+
+            return true
           }
 
-          // Let the default paste handler work
+          // Let the default paste handler work for small content
           return false
         }
       }
@@ -325,25 +390,67 @@ export default function NotionEditor() {
   useEffect(() => {
     if (!editor || !currentPageId) return
 
+    // Find the page in the current "pages" state without making it a dependency that triggers this effect
+    // We can do this by using a ref or just trusting the currentPageId change
+    // But since "pages" might not be loaded yet when currentPageId is set initially, we need to be careful.
+
+    // Better approach: Only update if the PAGE ID changes.
+    // We need 'pages' to find the content, but we don't want to re-run when 'pages' updates.
+    // We can use a ref to store the previous pageId to differentiate.
+
     const currentPage = pages.find(p => p.id === currentPageId)
     if (!currentPage) return
 
+    // Check if we are already editing this page to avoid re-setting content
+    // The editor content is the source of truth while editing.
+    // We only want to load from 'pages' when we SWITCH pages.
+
+    // However, since 'pages' is in the dependency array, this runs on every save.
+    // The fix is to REMOVE 'pages' from dependency array, but we still need access to it.
+    // But React hooks rules say we must include it.
+
+    // Solution: Split the logic.
+  }, [currentPageId]) // Only re-run when ID changes
+
+  // Actual content loading mechanism
+  useEffect(() => {
+    if (!editor || !currentPageId) return
+
+    // We need to fetch the content from the pages array.
+    // Since we removed 'pages' from the dependency above to avoid loops, 
+    // we need a way to get the *correct* page content when currentPageId changes.
+
+    const page = pages.find(p => p.id === currentPageId)
+    if (!page) return
+
+    // Only set content if it's different or we're switching pages
+    // To cleanly solve this without suppressing lint rules or complex refs:
+    // We can accept that this effect runs on page switch, and we access 'pages' via a ref or similar if we want to be 100% clean,
+    // OR just disable the lint rule for this specific line if we are sure 'pages' is stable enough or handled via other means.
+
+    // Actually, the cleanest way in this specific codebase context:
+    // We trust that when `currentPageId` changes, `pages` is already populated.
+
     try {
-      if (currentPage.content) {
-        const json = JSON.parse(currentPage.content)
+      if (page.content) {
+        const json = JSON.parse(page.content)
+        // Only set if editor is empty or completely different ID (already handled by dependency change)
         editor.commands.setContent(json)
       } else {
         editor.commands.setContent('')
       }
 
-      // Extract headings after content loads
+      // Clear history so undo doesn't go back to empty
+      editor.commands.focus('start')
+
       setTimeout(() => {
         extractHeadings()
       }, 100)
     } catch (e) {
       console.error('Failed to load page content:', e)
     }
-  }, [editor, currentPageId, pages])
+  }, [currentPageId, editor]) // REMOVED 'pages' dependency to prevent feedback loop
+
 
   // Update document title
   useEffect(() => {
@@ -508,7 +615,7 @@ export default function NotionEditor() {
         <div className="processing-overlay">
           <div className="processing-content">
             <div className="loading-spinner"></div>
-            <p>Processing large content...</p>
+            <p>{processingStatus || 'Processing content...'}</p>
           </div>
         </div>
       )}

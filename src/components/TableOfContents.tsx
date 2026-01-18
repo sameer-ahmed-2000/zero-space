@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { memo } from 'react'
 import { TocItem } from '../types'
 
 interface TableOfContentsProps {
@@ -9,7 +10,7 @@ interface TableOfContentsProps {
     onItemClick: (id: string) => void
 }
 
-export default function TableOfContents({ isOpen, toggle, items, activeId, onItemClick }: TableOfContentsProps) {
+function TableOfContents({ isOpen, toggle, items, activeId, onItemClick }: TableOfContentsProps) {
     return (
         <aside className={`toc-sidebar ${isOpen ? 'open' : 'closed'}`}>
             <div className="toc-header">
@@ -45,3 +46,5 @@ export default function TableOfContents({ isOpen, toggle, items, activeId, onIte
         </aside>
     )
 }
+
+export default memo(TableOfContents)
