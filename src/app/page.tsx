@@ -16,12 +16,29 @@ import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
 import { Page, TocItem } from '../types'
+import { runWhenIdle } from '../utils/idle'
 
 // Initialize lowlight for syntax highlighting
 const lowlight = createLowlight(common)
 
 // Default page icons
 const DEFAULT_ICONS = ['📄', '📝', '📋', '📑', '📓', '📔', '📕', '📗', '📘', '📙']
+
+// Debounce utility
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null
+      func(...args)
+    }
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }
+}
 
 export default function NotionEditor() {
   const [mounted, setMounted] = useState(false)
@@ -34,11 +51,85 @@ export default function NotionEditor() {
   // Multi-page state
   const [pages, setPages] = useState<Page[]>([])
   const [currentPageId, setCurrentPageId] = useState<string>('')
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const editorRef = useRef<any>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastUpdateRef = useRef<number>(0)
+  const pendingUpdateRef = useRef<boolean>(false)
 
-  // Function to extract headings from editor
+  // Debounced function to update page content (includes expensive JSON operations)
+  const debouncedUpdateContent = useCallback(
+    debounce((pageId: string, editor: any) => {
+      // Perform expensive operations asynchronously
+      runWhenIdle(() => {
+        const json = editor.getJSON()
+        const contentString = JSON.stringify(json)
+
+        setPages(prevPages => {
+          const updatedPages = prevPages.map(page =>
+            page.id === pageId
+              ? { ...page, content: contentString, updatedAt: Date.now() }
+              : page
+          )
+
+          // Save to localStorage
+          saveToLocalStorage(updatedPages)
+
+          return updatedPages
+        })
+
+        pendingUpdateRef.current = false
+      })
+    }, 300),
+    []
+  )
+
+  // Debounced function to save pages to localStorage
+  const saveToLocalStorage = useCallback(
+    debounce((pagesToSave: Page[]) => {
+      localStorage.setItem('zero-space-pages', JSON.stringify(pagesToSave))
+    }, 500),
+    []
+  )
+
+  // Debounced function to extract headings
+  const debouncedExtractHeadings = useCallback(
+    debounce(() => {
+      const editor = editorRef.current
+      if (!editor) return
+
+      const headings: TocItem[] = []
+      const doc = editor.state.doc
+
+      doc.descendants((node: any, pos: number) => {
+        if (node.type.name === 'heading') {
+          let id = node.attrs.id
+
+          // Generate a new ID if one doesn't exist
+          if (!id) {
+            id = `heading-${Math.random().toString(36).slice(2, 9)}`
+
+            if (editor.isEditable) {
+              editor.commands.setNodeSelection(pos)
+              editor.commands.updateAttributes('heading', { id })
+            }
+          }
+
+          const text = node.textContent
+          const level = node.attrs.level
+
+          headings.push({ id, text, level })
+        }
+      })
+
+      setTocItems(headings)
+    }, 500),
+    []
+  )
+
+  // Function to extract headings from editor (non-debounced version for initial load)
   const extractHeadings = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
@@ -128,24 +219,40 @@ export default function NotionEditor() {
       attributes: {
         class: 'tiptap-editor',
       },
+      handleDOMEvents: {
+        paste: (view, event) => {
+          const text = event.clipboardData?.getData('text/plain')
+
+          // Show loader for large pastes
+          if (text && text.length > 50000) {
+            setIsProcessing(true)
+            // Loader will be hidden by onUpdate callback
+          }
+
+          // Let the default paste handler work
+          return false
+        }
+      }
     },
     onUpdate: ({ editor }) => {
       if (!currentPageId) return
 
-      const json = editor.getJSON()
-
-      // Update current page content
-      setPages(prevPages =>
-        prevPages.map(page =>
-          page.id === currentPageId
-            ? { ...page, content: JSON.stringify(json), updatedAt: Date.now() }
-            : page
-        )
-      )
-
-      // Store editor in ref and extract headings
+      // Store editor in ref immediately
       editorRef.current = editor
-      extractHeadings()
+
+      // Mark that we have a pending update
+      pendingUpdateRef.current = true
+
+      // Defer expensive JSON operations to avoid blocking the UI
+      debouncedUpdateContent(currentPageId, editor)
+
+      // Debounce heading extraction to avoid blocking on large documents
+      debouncedExtractHeadings()
+
+      // Hide loader after content is processed
+      if (isProcessing) {
+        setTimeout(() => setIsProcessing(false), 500)
+      }
     },
     onCreate: ({ editor }) => {
       // Store editor in ref when created
@@ -205,12 +312,7 @@ export default function NotionEditor() {
     }
   }, [])
 
-  // Save pages to localStorage whenever they change
-  useEffect(() => {
-    if (pages.length > 0) {
-      localStorage.setItem('zero-space-pages', JSON.stringify(pages))
-    }
-  }, [pages])
+  // Note: Pages are now saved to localStorage via debounced saveToLocalStorage in onUpdate handler
 
   // Save current page ID
   useEffect(() => {
@@ -400,6 +502,16 @@ export default function NotionEditor() {
           setTocOpen(false)
         }}
       />
+
+      {/* Processing Overlay for Large Pastes */}
+      {isProcessing && (
+        <div className="processing-overlay">
+          <div className="processing-content">
+            <div className="loading-spinner"></div>
+            <p>Processing large content...</p>
+          </div>
+        </div>
+      )}
 
       <Sidebar
         isOpen={sidebarOpen}
