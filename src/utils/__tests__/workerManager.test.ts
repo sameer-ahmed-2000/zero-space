@@ -1,4 +1,4 @@
-import { WorkerManager } from './workerManager'
+import { WorkerManager } from "../workerManager"
 
 describe('WorkerManager', () => {
     it('should fall back to main thread when worker is not available', async () => {

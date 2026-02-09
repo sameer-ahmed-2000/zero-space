@@ -1245,3 +1245,40 @@ body {
     opacity: 1;
   }
 }
+
+.code-block-wrapper {
+  position: relative;
+}
+
+.copy-code-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+
+.code-block-wrapper:hover .copy-code-button {
+  opacity: 1;
+}
+
+.copied-indicator {
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #4f46e5;
+  transition: width 0.15s linear;
+}

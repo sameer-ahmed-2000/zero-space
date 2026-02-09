@@ -1,5 +1,5 @@
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 
 export interface CodeBlockComponentProps {
     node: {
@@ -10,69 +10,34 @@ export interface CodeBlockComponentProps {
     extension: any
 }
 
-export default function CodeBlockComponent({ node, updateAttributes, extension }: CodeBlockComponentProps) {
-    const [copied, setCopied] = useState(false)
-    const [isVisible, setIsVisible] = useState(false)
-    const wrapperRef = useRef<HTMLDivElement>(null)
+export default function CodeBlockComponent({ node }: CodeBlockComponentProps) {
+    const copiedRef = useRef<HTMLSpanElement>(null)
 
-    useEffect(() => {
-        const observer = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) {
-                setIsVisible(true)
-                observer.disconnect()
-            }
-        }, { rootMargin: '100px' })
-
-        if (wrapperRef.current) {
-            observer.observe(wrapperRef.current)
+    const copyToClipboard = useCallback(() => {
+        navigator.clipboard.writeText(node.textContent || '')
+        if (copiedRef.current) {
+            copiedRef.current.style.opacity = '1'
+            setTimeout(() => {
+                if (copiedRef.current) {
+                    copiedRef.current.style.opacity = '0'
+                }
+            }, 2000)
         }
-
-        return () => {
-            observer.disconnect()
-        }
-    }, [])
-
-    const copyToClipboard = () => {
-        const text = node.textContent || ''
-        navigator.clipboard.writeText(text).then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        }).catch(err => {
-            console.error('Failed to copy: ', err)
-        })
-    }
+    }, [node.textContent])
 
     return (
-        <NodeViewWrapper className="code-block-wrapper relative group">
-            {/* Observation target */}
-            <div ref={wrapperRef} className="absolute inset-0 pointer-events-none" aria-hidden="true" />
-
-            {isVisible && (
-                <button
-                    className={`copy-code-button ${copied ? 'copied' : ''}`}
-                    onClick={copyToClipboard}
-                    contentEditable={false}
-                    type="button"
-                    aria-label="Copy code"
-                >
-                    {copied ? (
-                        <>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                            <span>Copied!</span>
-                        </>
-                    ) : (
-                        <>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                            <span>Copy</span>
-                        </>
-                    )}
-                </button>
-            )}
+        <NodeViewWrapper className="code-block-wrapper group">
+            <button
+                className="copy-code-button"
+                onClick={copyToClipboard}
+                contentEditable={false}
+                type="button"
+            >
+                Copy
+                <span ref={copiedRef} className="copied-indicator">
+                    ✓
+                </span>
+            </button>
 
             <pre>
                 <NodeViewContent as="code" />

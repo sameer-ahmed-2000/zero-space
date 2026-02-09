@@ -60,7 +60,11 @@ export default function NotionEditor() {
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastUpdateRef = useRef<number>(0)
   const pendingUpdateRef = useRef<boolean>(false)
-
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const yieldToMainThread = () =>
+    new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve())
+    })
   // Debounced function to update page content (includes expensive JSON operations)
   const debouncedUpdateContent = useCallback(
     debounce((pageId: string, editor: any) => {
@@ -261,41 +265,75 @@ export default function NotionEditor() {
       handleDOMEvents: {
         paste: (view, event) => {
           const text = event.clipboardData?.getData('text/plain')
+          if (!text) return false
 
-          // Handle large pastes with web worker
-          if (text && text.length > 50000) {
-            setIsProcessing(true)
-            setProcessingStatus('Converting large content...')
-            event.preventDefault()
-
-            // Process in worker
-            workerManager.parseMarkdownToJson(text)
-              .then((json) => {
-                if (editorRef.current) {
-                  editorRef.current.commands.insertContent(json)
-                }
-                setProcessingStatus('Rendering content...')
-
-                // content inserted, but React/ProseMirror needs to render
-                // Wait for idle to ensure rendering is done before hiding loader
-                runWhenIdle(() => {
-                  setIsProcessing(false)
-                  setProcessingStatus('')
-                }, 5000) // Give it time
-              })
-              .catch(err => {
-                console.error('Paste failed:', err)
-                setIsProcessing(false)
-                setProcessingStatus('')
-                // Fallback to default paste if worker fails? 
-                // Currently just logging. User can try smaller chunks or plain text.
-              })
-
-            return true
+          // Small paste → let TipTap handle it normally
+          if (text.length < 50000) {
+            return false
           }
 
-          // Let the default paste handler work for small content
-          return false
+          event.preventDefault()
+
+          setIsProcessing(true)
+          setProcessingProgress(0)
+          setProcessingStatus('Parsing markdown…')
+
+            ; (async () => {
+              try {
+                // 1️⃣ Parse markdown in worker
+                const json = await workerManager.parseMarkdownToJson(text)
+
+                if (!editorRef.current) return
+
+                const editor = editorRef.current
+                const nodes = json.content || []
+                const total = nodes.length
+
+                if (total === 0) {
+                  setIsProcessing(false)
+                  return
+                }
+
+                setProcessingStatus('Inserting content…')
+
+                // 2️⃣ Disable history (huge perf win)
+                editor.commands.setMeta('addToHistory', false)
+
+                // 3️⃣ Insert chunk-by-chunk
+                for (let i = 0; i < total; i++) {
+                  editor.commands.insertContent(nodes[i], {
+                    parseOptions: { preserveWhitespace: 'full' },
+                  })
+
+                  // 4️⃣ Progress update
+                  if (i % 5 === 0 || i === total - 1) {
+                    const percent = Math.round(((i + 1) / total) * 100)
+                    setProcessingProgress(percent)
+                    await yieldToMainThread()
+                  }
+                }
+
+                // 5️⃣ Re-enable history
+                editor.commands.setMeta('addToHistory', true)
+
+                setProcessingStatus('Finalizing…')
+
+                // 6️⃣ Let layout + NodeViews settle
+                await yieldToMainThread()
+
+              } catch (err) {
+                console.error('Large paste failed:', err)
+              } finally {
+                setProcessingProgress(100)
+                setTimeout(() => {
+                  setIsProcessing(false)
+                  setProcessingStatus('')
+                  setProcessingProgress(0)
+                }, 300)
+              }
+            })()
+
+          return true
         }
       }
     },
@@ -614,8 +652,17 @@ export default function NotionEditor() {
       {isProcessing && (
         <div className="processing-overlay">
           <div className="processing-content">
-            <div className="loading-spinner"></div>
-            <p>{processingStatus || 'Processing content...'}</p>
+            <div className="loading-spinner" />
+            <p>{processingStatus}</p>
+
+            <div className="progress-bar">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${processingProgress}%` }}
+              />
+            </div>
+
+            <span>{processingProgress}%</span>
           </div>
         </div>
       )}
