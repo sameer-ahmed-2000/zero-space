@@ -11,7 +11,10 @@ A high-performance, Notion-style WYSIWYG Markdown editor built with Next.js and 
 📁 **Large File Import** - Import `.md` and `.txt` files (bypasses clipboard limits)  
 📄 **Professional PDF Export** - One-click export with smart page breaks  
 💾 **Auto-Save** - Content automatically saved to localStorage  
-🎯 **Contextual Menus** - Bubble menu for text formatting, floating menu for block types
+☁️ **Google Drive Sync (BYOD)** - Bring Your Own Database - sync your notes to your personal Google Drive  
+🎯 **Contextual Menus** - Bubble menu for text formatting, floating menu for block types  
+🌙 **Dark Mode** - Toggle between light and dark themes  
+📑 **Multi-Page Support** - Organize content across multiple pages
 
 ## Tech Stack
 
@@ -101,6 +104,44 @@ Supported languages include JavaScript, TypeScript, Python, Java, C++, and many 
 ## Auto-Save
 
 Your content is automatically saved to localStorage with every change. Refresh the page and your work will be restored.
+
+## Google Drive Sync (BYOD)
+
+**Bring Your Own Database** - Store your notes securely in your own Google Drive account!
+
+### Features
+
+- **Personal Storage**: Your notes are saved to a file called `zero_space_db.json` in YOUR Google Drive
+- **Real-Time Sync**: Automatic synchronization with 2-second debounce after you stop typing
+- **Visual Feedback**: See sync status (Saving/Synced/Error) directly in the toolbar
+- **Secure**: Uses the `drive.file` scope - the app can ONLY access files it creates, not your entire Drive
+- **Multi-Device**: Access your notes from any device by signing in with the same Google Account
+- **Offline Fallback**: Works with localStorage when offline; syncs when connection is restored
+
+### Setup
+
+To enable Google Drive sync, you need to configure OAuth credentials. See the detailed setup guide: [GOOGLE_DRIVE_SETUP.md](./GOOGLE_DRIVE_SETUP.md)
+
+Quick steps:
+1. Create a Google Cloud project
+2. Enable the Google Drive API
+3. Create OAuth 2.0 credentials
+4. Add your Client ID to `.env.local`
+5. Click "Connect Drive" in the toolbar
+
+### Usage
+
+1. Click the **"Connect Drive"** button in the top toolbar
+2. Sign in with your Google Account  
+3. Grant the app permission to access files it creates
+4. Your notes will automatically sync to Drive
+
+The sync status appears next to the Drive button:
+- **Saving...** (Blue, spinning): Syncing to Drive
+- **Synced** (Green, checkmark): All changes saved
+- **Error** (Red, alert): Sync failed (will retry)
+
+To disconnect, click your username and confirm.
 
 ## Project Structure
 

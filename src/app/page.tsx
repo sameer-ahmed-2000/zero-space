@@ -10,20 +10,33 @@ import { List } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Markdown } from 'tiptap-markdown'
 
+import { googleLogout, useGoogleLogin } from '@react-oauth/google'
 import CodeBlockComponent from '../components/CodeBlockComponent'
 import EditorMenus from '../components/EditorMenus'
 import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
 import { Page, TocItem } from '../types'
+import * as GoogleDrive from '../utils/googleDrive'
 import { runWhenIdle } from '../utils/idle'
 import { workerManager } from '../utils/workerManager'
 
+// Google Drive API types
+declare global {
+  interface Window {
+    gapi: any
+  }
+}
+
+type SyncStatus = 'idle' | 'saving' | 'synced' | 'error'
+
+interface DriveFile {
+  id: string
+  name: string
+}
+
 // Initialize lowlight for syntax highlighting
 const lowlight = createLowlight(common)
-
-// Default page icons
-const DEFAULT_ICONS = ['📄', '📝', '📋', '📑', '📓', '📔', '📕', '📗', '📘', '📙']
 
 // Debounce utility
 function debounce<T extends (...args: any[]) => any>(
@@ -41,6 +54,210 @@ function debounce<T extends (...args: any[]) => any>(
   }
 }
 
+// ============================================
+// Component Start
+// ============================================
+
+
+
+const DRIVE_API_SCOPE = 'https://www.googleapis.com/auth/drive.file'
+const DRIVE_FILE_NAME = 'zero_space_db.json'
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
+
+// Load the Google API script dynamically (SSR-safe)
+const loadGapiScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Window is undefined'))
+      return
+    }
+
+    if (window.gapi) {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://apis.google.com/js/api.js'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load Google API script'))
+    document.body.appendChild(script)
+  })
+}
+
+
+// Initialize the Google API client
+const initializeGapi = async (clientId: string): Promise<void> => {
+  console.log('🔍 Step 1: Loading gapi script...')
+  await loadGapiScript()
+  console.log('✅ Step 1 complete: gapi script loaded')
+
+  return new Promise((resolve, reject) => {
+    console.log('🔍 Step 2: Loading client:auth2 modules...')
+    window.gapi.load('client:auth2', async () => {
+      console.log('✅ Step 2 complete: client:auth2 loaded')
+      try {
+        console.log('🔍 Step 3: Initializing gapi client with:', {
+          clientId: clientId.substring(0, 20) + '...',
+          scope: DRIVE_API_SCOPE,
+          discoveryDoc: DISCOVERY_DOC
+        })
+
+        await window.gapi.client.init({
+          apiKey: '', // Not needed for client-side OAuth with drive.file scope
+          clientId,
+          discoveryDocs: [DISCOVERY_DOC],
+          scope: DRIVE_API_SCOPE,
+        })
+
+        console.log('✅ Step 3 complete: gapi client initialized')
+        resolve()
+      } catch (error) {
+        console.error('❌ Step 3 failed during gapi.client.init:', error)
+
+        // Extract detailed error info from gapi error object
+        const errorObj = error as any
+        const errorDetails = {
+          message: errorObj?.message || errorObj?.error?.message || 'Unknown error',
+          code: errorObj?.code || errorObj?.error?.code,
+          status: errorObj?.status || errorObj?.error?.status,
+          details: errorObj?.details || errorObj?.error?.details,
+          result: errorObj?.result?.error,
+        }
+
+        console.error('Error details:', errorDetails)
+
+        // Provide specific troubleshooting based on error
+        if (errorDetails.code === 400 || errorDetails.message?.includes('origin')) {
+          console.error('🔍 LIKELY CAUSE: Unauthorized JavaScript origin')
+          console.error('📋 TO FIX:')
+          console.error('   1. Go to: https://console.cloud.google.com/apis/credentials')
+          console.error('   2. Click on your OAuth 2.0 Client ID')
+          console.error('   3. Under "Authorized JavaScript origins", add:')
+          console.error('      • http://localhost:3000')
+          console.error('      • http://localhost:3001 (if using different port)')
+          console.error('   4. Click "Save"')
+          console.error('   5. Wait 1-2 minutes, then reload this page')
+        } else if (errorDetails.message?.includes('not found') || errorDetails.message?.includes('invalid')) {
+          console.error('🔍 LIKELY CAUSE: Invalid Client ID')
+          console.error('📋 TO FIX: Double-check your Client ID in Google Cloud Console')
+        }
+
+        reject(error)
+      }
+    })
+  })
+}
+
+// Sign in to Google
+const signInToGoogle = async (): Promise<void> => {
+  const authInstance = window.gapi.auth2.getAuthInstance()
+  await authInstance.signIn()
+}
+
+// Sign out from Google
+const signOutFromGoogle = async (): Promise<void> => {
+  const authInstance = window.gapi.auth2.getAuthInstance()
+  await authInstance.signOut()
+}
+
+// Get current user email
+const getCurrentUserEmail = (): string => {
+  const authInstance = window.gapi.auth2.getAuthInstance()
+  const user = authInstance.currentUser.get()
+  const profile = user.getBasicProfile()
+  return profile ? profile.getEmail() : ''
+}
+
+// Search for the zero_space_db.json file
+const searchDriveFile = async (): Promise<DriveFile | null> => {
+  try {
+    const response = await window.gapi.client.drive.files.list({
+      q: `name='${DRIVE_FILE_NAME}' and trashed=false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    })
+
+    const files = response.result.files
+    if (files && files.length > 0) {
+      return files[0]
+    }
+    return null
+  } catch (error) {
+    console.error('Error searching for Drive file:', error)
+    throw error
+  }
+}
+
+// Create a new zero_space_db.json file
+const createDriveFile = async (initialContent: string): Promise<string> => {
+  try {
+    const fileMetadata = {
+      name: DRIVE_FILE_NAME,
+      mimeType: 'application/json',
+    }
+
+    const form = new FormData()
+    form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }))
+    form.append('file', new Blob([initialContent], { type: 'application/json' }))
+
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: new Headers({
+        Authorization: 'Bearer ' + window.gapi.auth.getToken().access_token,
+      }),
+      body: form,
+    })
+
+    const result = await response.json()
+    return result.id
+  } catch (error) {
+    console.error('Error creating Drive file:', error)
+    throw error
+  }
+}
+
+// Download file content from Drive
+const downloadDriveFileContent = async (fileId: string): Promise<string> => {
+  try {
+    const response = await window.gapi.client.drive.files.get({
+      fileId,
+      alt: 'media',
+    })
+
+    return JSON.stringify(response.result)
+  } catch (error) {
+    console.error('Error downloading Drive file content:', error)
+    throw error
+  }
+}
+
+// Update file content in Drive
+const updateDriveFileContent = async (fileId: string, content: string): Promise<void> => {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+      {
+        method: 'PATCH',
+        headers: new Headers({
+          Authorization: 'Bearer ' + window.gapi.auth.getToken().access_token,
+          'Content-Type': 'application/json',
+        }),
+        body: content,
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to update Drive file: ${response.statusText}`)
+    }
+  } catch (error) {
+    console.error('Error updating Drive file content:', error)
+    throw error
+  }
+}
+
 export default function NotionEditor() {
   const [mounted, setMounted] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
@@ -55,12 +272,51 @@ export default function NotionEditor() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
 
+  // Google Drive state
+  const [isSignedIn, setIsSignedIn] = useState(false)
+  const [driveFileId, setDriveFileId] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  const [userEmail, setUserEmail] = useState<string>('')
+  const [gapiInitialized, setGapiInitialized] = useState(false)
+
   const editorRef = useRef<any>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastUpdateRef = useRef<number>(0)
   const pendingUpdateRef = useRef<boolean>(false)
+  const driveSyncRef = useRef<((pages: Page[]) => void) | null>(null)
   const [processingProgress, setProcessingProgress] = useState(0)
+
+  // Google Login Hook (Modern GIS)
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      console.log('✅ Google login successful')
+
+      try {
+        // Set the access token for Drive API
+        GoogleDrive.setGapiAccessToken(tokenResponse.access_token)
+
+        // Get user email
+        const email = await GoogleDrive.getCurrentUserEmail(tokenResponse.access_token)
+        setUserEmail(email)
+        setIsSignedIn(true)
+
+        // Initialize Drive file
+        await initializeDriveFile()
+      } catch (error) {
+        console.error('Error after Google login:', error)
+        setSyncStatus('error')
+        alert('Signed in successfully, but failed to initialize Drive. Please try again.')
+      }
+    },
+    onError: (error) => {
+      console.error('❌ Google login failed:', error)
+      setSyncStatus('error')
+      alert('Failed to sign in to Google Drive. Please try again.')
+    },
+    scope: GoogleDrive.DRIVE_API_SCOPE,
+  })
+
   const yieldToMainThread = () =>
     new Promise<void>(resolve => {
       requestAnimationFrame(() => resolve())
@@ -86,6 +342,11 @@ export default function NotionEditor() {
             // Save to localStorage
             saveToLocalStorage(updatedPages)
 
+            // Sync to Google Drive (if signed in)
+            if (driveSyncRef.current) {
+              driveSyncRef.current(updatedPages)
+            }
+
             return updatedPages
           })
         } catch (error) {
@@ -100,6 +361,9 @@ export default function NotionEditor() {
                 : page
             )
             saveToLocalStorage(updatedPages)
+            if (driveSyncRef.current) {
+              driveSyncRef.current(updatedPages)
+            }
             return updatedPages
           })
         }
@@ -133,6 +397,63 @@ export default function NotionEditor() {
         })
     }, 2000),
     []
+  )
+
+  // Debounced function to sync to Google Drive (2-second delay)
+  const debouncedDriveSync = useCallback(
+    debounce(async (pagesToSync: Page[]) => {
+      // Only sync if signed in and have a file ID
+      if (!isSignedIn || !driveFileId) {
+        console.log('Skipping sync: Not signed in or no file ID', { isSignedIn, driveFileId })
+        return
+      }
+
+      console.log('Triggering Drive Sync...')
+      setSyncStatus('saving')
+
+      try {
+        const contentString = await workerManager.stringifyContent(pagesToSync)
+
+        // Retry logic (up to 3 attempts)
+        let attempts = 0
+        const maxAttempts = 3
+        let lastError: Error | null = null
+
+        while (attempts < maxAttempts) {
+          try {
+            await GoogleDrive.updateDriveFileContent(driveFileId, contentString)
+            setSyncStatus('synced')
+
+            // Reset sync status to idle after 2 seconds
+            setTimeout(() => {
+              setSyncStatus('idle')
+            }, 2000)
+
+            return
+          } catch (error) {
+            lastError = error as Error
+            attempts++
+
+            if (attempts < maxAttempts) {
+              // Wait before retrying (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts)))
+            }
+          }
+        }
+
+        // All attempts failed
+        throw lastError
+      } catch (error) {
+        console.error('Failed to sync to Drive:', error)
+        setSyncStatus('error')
+
+        // Reset sync status after 5 seconds
+        setTimeout(() => {
+          setSyncStatus('idle')
+        }, 5000)
+      }
+    }, 2000),
+    [isSignedIn, driveFileId]
   )
 
   // Debounced function to extract headings
@@ -382,6 +703,91 @@ export default function NotionEditor() {
     setCurrentPageId(initialPage.id)
   }
 
+  // ============================================
+  // GOOGLE DRIVE HANDLERS
+  // ============================================
+
+  // Handle Google Drive sign-in
+  const handleConnectDrive = async () => {
+    try {
+      if (!isSignedIn) {
+        // Check if gapi is initialized
+        if (!gapiInitialized) {
+          alert('Google Drive is still loading. Please wait a moment and try again.')
+          return
+        }
+
+        // Trigger Google login using modern GIS
+        googleLogin()
+      } else {
+        // Sign out
+        googleLogout()
+        GoogleDrive.clearAccessToken()
+
+        setIsSignedIn(false)
+        setUserEmail('')
+        setDriveFileId(null)
+        setSyncStatus('idle')
+
+        // Safety: Clear editor content when user signs out
+        if (editor) {
+          editor.commands.clearContent()
+        }
+
+        // Reset pages to initial state
+        createInitialPage()
+      }
+    } catch (error) {
+      console.error('Google Drive connection error:', error)
+      setSyncStatus('error')
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      alert(`Failed to connect to Google Drive: ${errorMessage}\n\nPlease check your internet connection and try again.`)
+    }
+  }
+
+  // Initialize Drive file (check if exists, or create new)
+  const initializeDriveFile = async () => {
+    try {
+      // Search for existing file
+      const existingFile = await GoogleDrive.searchDriveFile()
+
+      if (existingFile) {
+        // File found - download and load content
+        setDriveFileId(existingFile.id)
+
+        const content = await GoogleDrive.downloadDriveFileContent(existingFile.id)
+        const loadedPages: Page[] = JSON.parse(content)
+
+        // Safety: Clear editor before loading new user's data
+        if (editor) {
+          editor.commands.clearContent()
+        }
+
+        setPages(loadedPages)
+
+        if (loadedPages.length > 0) {
+          setCurrentPageId(loadedPages[0].id)
+        }
+
+        setSyncStatus('synced')
+        setTimeout(() => setSyncStatus('idle'), 2000)
+      } else {
+        // No file found - create new one with current pages
+        const initialContent = JSON.stringify(pages)
+        const newFileId = await GoogleDrive.createDriveFile(initialContent)
+        setDriveFileId(newFileId)
+
+        setSyncStatus('synced')
+        setTimeout(() => setSyncStatus('idle'), 2000)
+      }
+    } catch (error) {
+      console.error('Failed to initialize Drive file:', error)
+      setSyncStatus('error')
+    }
+  }
+
   // Initialize pages from localStorage
   useEffect(() => {
     setMounted(true)
@@ -413,6 +819,64 @@ export default function NotionEditor() {
       setDarkMode(true)
       document.documentElement.classList.add('dark')
     }
+  }, [])
+
+  // Update driveSyncRef whenever debouncedDriveSync changes
+  useEffect(() => {
+    driveSyncRef.current = debouncedDriveSync as any
+  }, [debouncedDriveSync])
+
+  // Initialize Google Drive API
+  useEffect(() => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+
+    if (!clientId) {
+      console.warn('⚠️ Google Client ID not configured. Drive sync will not be available.')
+      console.info('💡 To enable Drive sync, add NEXT_PUBLIC_GOOGLE_CLIENT_ID to your .env.local file')
+      return
+    }
+
+    // Validate Client ID format
+    if (clientId.startsWith('GOCSPX-')) {
+      console.error('❌ INVALID CREDENTIAL DETECTED!')
+      console.error('You provided a Client Secret (GOCSPX-...) instead of a Client ID')
+      console.error('Client ID should look like: 123456789-abc.apps.googleusercontent.com')
+      console.error('See URGENT_FIX_REQUIRED.md for instructions')
+
+      // Set gapiInitialized to true so button stops loading
+      setGapiInitialized(true)
+      setSyncStatus('error')
+
+      alert(
+        '⚠️ GOOGLE DRIVE CONFIGURATION ERROR\n\n' +
+        'You entered a Client Secret instead of a Client ID!\n\n' +
+        'Client ID should look like:\n123456789-abc.apps.googleusercontent.com\n\n' +
+        'NOT:\nGOCSPX-...\n\n' +
+        'Please check the console and URGENT_FIX_REQUIRED.md for instructions.'
+      )
+      return
+    }
+
+    if (!clientId.includes('.apps.googleusercontent.com')) {
+      console.warn('⚠️ Client ID format looks incorrect')
+      console.warn('Expected format: xxxxx.apps.googleusercontent.com')
+      console.warn('Your value:', clientId)
+    }
+
+    const initGapi = async () => {
+      try {
+        console.log('🔄 Initializing Google Drive API...')
+        await GoogleDrive.initializeGapiClient()
+        setGapiInitialized(true)
+        console.log('✅ Google Drive API ready')
+      } catch (error) {
+        console.error('❌ Failed to initialize Google Drive API:', error)
+        setGapiInitialized(true) // Set to true anyway to stop loading state
+        setSyncStatus('error')
+      }
+    }
+
+    initGapi()
   }, [])
 
   // Note: Pages are now saved to localStorage via debounced saveToLocalStorage in onUpdate handler
@@ -688,6 +1152,11 @@ export default function NotionEditor() {
           onImportFile={handleFileImport}
           onExport={handleExport}
           onClear={handleClear}
+          isSignedIn={isSignedIn}
+          syncStatus={syncStatus}
+          userEmail={userEmail}
+          onConnectDrive={handleConnectDrive}
+          gapiInitialized={gapiInitialized}
         />
 
         {/* Editor Container */}

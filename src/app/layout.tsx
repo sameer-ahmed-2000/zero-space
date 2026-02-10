@@ -1,3 +1,4 @@
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -20,6 +21,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
+
   return (
     <html lang="en">
       <head>
@@ -27,7 +30,13 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={inter.className}>
-        {children}
+        {clientId ? (
+          <GoogleOAuthProvider clientId={clientId}>
+            {children}
+          </GoogleOAuthProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   )
