@@ -5,6 +5,7 @@ export interface CommandItem {
     title: string
     description: string
     icon: React.ElementType
+    group: string
     command: ({ editor, range }: { editor: any, range: any }) => void
 }
 
@@ -63,30 +64,55 @@ export const SlashCommandList = forwardRef((props: SlashCommandListProps, ref) =
     }))
 
     return (
-        <div className="flex flex-col p-1.5 w-72 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/50 rounded-xl shadow-2xl ring-1 ring-black/5 overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex flex-col p-2 w-[400px] bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-xl border border-gray-200/50 dark:border-slate-700/50 rounded-xl shadow-2xl ring-1 ring-black/5 overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-200">
             {props.items.length ? (
-                props.items.map((item, index) => (
-                    <button
-                        className={`flex items-center gap-3 px-3 py-2 text-sm text-left rounded-lg transition-all duration-150 group ${index === selectedIndex
-                                ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                : 'text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5'
-                            }`}
-                        key={index}
-                        onClick={() => selectItem(index)}
-                    >
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-md shrink-0 transition-colors border ${index === selectedIndex
-                                ? 'bg-white dark:bg-blue-500/20 border-blue-200 dark:border-blue-500/30'
-                                : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 group-hover:border-gray-300 dark:group-hover:border-zinc-600'
-                            }`}>
-                            <item.icon size={16} className={index === selectedIndex ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'} />
-                        </div>
+                <div className="max-h-[330px] overflow-y-auto pr-1 custom-scrollbar">
+                    {props.items.map((item, index) => {
+                        const isFirstInGroup = index === 0 || item.group !== props.items[index - 1].group
 
-                        <div className="flex flex-col flex-1 min-w-0">
-                            <span className={`font-medium truncate ${index === selectedIndex ? 'text-blue-700 dark:text-blue-300' : 'text-zinc-900 dark:text-zinc-100'}`}>{item.title}</span>
-                            <span className={`text-xs truncate ${index === selectedIndex ? 'text-blue-500/80 dark:text-blue-400/70' : 'text-zinc-500 dark:text-zinc-500'}`}>{item.description}</span>
-                        </div>
-                    </button>
-                ))
+                        return (
+                            <React.Fragment key={index}>
+                                {isFirstInGroup && (
+                                    <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-3 py-2 mt-2 first:mt-0 select-none">
+                                        {item.group}
+                                    </div>
+                                )}
+                                <button
+                                    className={`flex items-center gap-3 px-3 py-2.5 w-full text-left rounded-lg transition-all duration-150 group ${index === selectedIndex
+                                            ? 'bg-indigo-50/80 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-l-2 border-indigo-500 dark:border-indigo-400'
+                                            : 'text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 border-l-2 border-transparent'
+                                        }`}
+                                    key={index}
+                                    onClick={() => selectItem(index)}
+                                    // Scroll into view if selected
+                                    ref={el => {
+                                        if (index === selectedIndex && el) {
+                                            el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                                        }
+                                    }}
+                                >
+                                    <div className={`flex items-center justify-center w-8 h-8 rounded-md shrink-0 transition-colors ${index === selectedIndex
+                                            ? 'text-indigo-600 dark:text-indigo-300 bg-indigo-100/50 dark:bg-indigo-500/20'
+                                            : 'text-zinc-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800'
+                                        }`}>
+                                        <item.icon size={16} strokeWidth={2} />
+                                    </div>
+
+                                    <div className="flex flex-col flex-1 min-w-0">
+                                        <span className={`text-sm font-medium truncate ${index === selectedIndex ? 'text-indigo-700 dark:text-indigo-200' : 'text-zinc-900 dark:text-zinc-100'
+                                            }`}>
+                                            {item.title}
+                                        </span>
+                                        <span className={`text-xs truncate ${index === selectedIndex ? 'text-indigo-500/80 dark:text-indigo-300/70' : 'text-zinc-500 dark:text-zinc-500'
+                                            }`}>
+                                            {item.description}
+                                        </span>
+                                    </div>
+                                </button>
+                            </React.Fragment>
+                        )
+                    })}
+                </div>
             ) : (
                 <div className="p-3 text-sm text-zinc-500 text-center italic">No commands found</div>
             )}

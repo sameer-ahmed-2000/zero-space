@@ -16,11 +16,13 @@ import SlashCommandList from '../components/SlashCommandList'
 
 const getSuggestionItems = ({ query }: { query: string }) => {
     return [
+        // BASIC BLOCKS
         {
             title: 'Heading 1',
             description: 'Big section heading',
             searchTerms: ['h1', 'heading', 'title'],
             icon: Heading1,
+            group: 'Basic Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).setNode('heading', { level: 1 }).run()
             },
@@ -30,6 +32,7 @@ const getSuggestionItems = ({ query }: { query: string }) => {
             description: 'Medium section heading',
             searchTerms: ['h2', 'heading', 'subtitle'],
             icon: Heading2,
+            group: 'Basic Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).setNode('heading', { level: 2 }).run()
             },
@@ -39,44 +42,53 @@ const getSuggestionItems = ({ query }: { query: string }) => {
             description: 'Small section heading',
             searchTerms: ['h3', 'heading', 'subsubtitle'],
             icon: Heading3,
+            group: 'Basic Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run()
             },
         },
         {
             title: 'Bullet List',
-            description: 'Create a simple bullet list',
+            description: 'Simple list',
             searchTerms: ['unordered', 'point'],
             icon: List,
+            group: 'Basic Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).toggleBulletList().run()
             },
         },
         {
             title: 'Numbered List',
-            description: 'Create a list with numbering',
+            description: 'Ordered list',
             searchTerms: ['ordered'],
             icon: ListOrdered,
+            group: 'Basic Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).toggleOrderedList().run()
             },
         },
-        {
-            title: 'Quote',
-            description: 'Capture a quote',
-            searchTerms: ['blockquote'],
-            icon: TextQuote,
-            command: ({ editor, range }: any) => {
-                editor.chain().focus().deleteRange(range).toggleBlockquote().run()
-            },
-        },
+
+        // CODE BLOCKS
         {
             title: 'Code Block',
-            description: 'Capture a code snippet',
+            description: 'Syntax highlighted',
             searchTerms: ['codeblock'],
             icon: CodeSquare,
+            group: 'Code Blocks',
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+            },
+        },
+
+        // ADVANCED
+        {
+            title: 'Callout',
+            description: 'Info/warning box',
+            searchTerms: ['quote', 'callout'],
+            icon: TextQuote,
+            group: 'Advanced',
+            command: ({ editor, range }: any) => {
+                editor.chain().focus().deleteRange(range).toggleBlockquote().run()
             },
         },
     ].filter(item => {

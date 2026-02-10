@@ -15,6 +15,7 @@ import { Markdown } from 'tiptap-markdown'
 import { googleLogout, useGoogleLogin } from '@react-oauth/google'
 import CodeBlockComponent from '../components/CodeBlockComponent'
 import EditorMenus from '../components/EditorMenus'
+import EmptyState from '../components/EmptyState'
 import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
@@ -1212,7 +1213,18 @@ export default function NotionEditor() {
             </div>
 
             <EditorMenus editor={editor} />
-            <EditorContent editor={editor} />
+
+            {editor && editor.isEmpty && !editor.isFocused && (
+              <div className="absolute top-48 left-0 right-0 z-0 pointer-events-none flex justify-center">
+                <EmptyState
+                  onCreatePage={() => editor.commands.focus()}
+                  onCreateCode={() => editor.chain().focus().toggleCodeBlock().run()}
+                  onCreateDoc={() => editor.chain().focus().setHeading({ level: 1 }).run()}
+                />
+              </div>
+            )}
+
+            <EditorContent editor={editor} className="relative z-10 min-h-[500px]" />
           </div>
         </div>
       </main>
