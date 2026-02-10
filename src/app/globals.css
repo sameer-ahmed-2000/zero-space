@@ -351,24 +351,25 @@ body {
 }
 
 .top-bar {
-  height: 45px;
+  height: 52px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   background: var(--bg-primary);
   flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
 .sidebar-toggle-btn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   padding: 6px;
   cursor: pointer;
   color: var(--text-secondary);
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  border-radius: 6px;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -377,26 +378,27 @@ body {
 .sidebar-toggle-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  border-color: var(--border-hover);
 }
 
 .top-bar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 6px 12px;
   background: transparent;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -477,17 +479,26 @@ body {
 }
 
 .drive-btn {
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drive-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .drive-btn.connected {
-  background: var(--bg-active);
+  background: rgba(35, 131, 226, 0.08);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
 
 .drive-btn.connected:hover {
-  background: rgba(35, 131, 226, 0.15);
+  background: rgba(35, 131, 226, 0.12);
 }
 
 .drive-btn:disabled {
@@ -507,9 +518,9 @@ body {
 }
 
 .editor-container {
-  max-width: 900px;
+  max-width: 800px;
   margin: 0 auto;
-  padding: 60px 96px 200px;
+  padding: 80px 96px 300px;
   min-height: 100%;
   width: 100%;
 }
@@ -518,8 +529,8 @@ body {
 .page-header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .page-icon {
@@ -537,9 +548,9 @@ body {
 
 .editor-page-title {
   flex: 1;
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.25;
   border: none;
   outline: none;
   background: transparent;
@@ -573,7 +584,8 @@ body {
 
 .tiptap-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+  opacity: 0.5;
   float: left;
   height: 0;
   pointer-events: none;
