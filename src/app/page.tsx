@@ -933,24 +933,33 @@ export default function NotionEditor() {
     // Actually, the cleanest way in this specific codebase context:
     // We trust that when `currentPageId` changes, `pages` is already populated.
 
-    try {
-      if (page.content) {
-        const json = JSON.parse(page.content)
-        // Only set if editor is empty or completely different ID (already handled by dependency change)
-        editor.commands.setContent(json)
-      } else {
+    // Wrap content update in setTimeout to avoid flushSync error with React NodeViews
+    // effectively moving this to a micro-task/next tick
+    setTimeout(() => {
+      if (!editor || editor.isDestroyed) return
+
+      try {
+        if (page.content) {
+          const json = JSON.parse(page.content)
+          // Only set if editor is empty or completely different ID (already handled by dependency change)
+          editor.commands.setContent(json)
+        } else {
+          editor.commands.setContent('')
+        }
+
+        // Clear history so undo doesn't go back to empty
+        editor.commands.focus('start')
+
+        // Allow some time for the DOM to update before extracting headings
+        setTimeout(() => {
+          extractHeadings()
+        }, 100)
+      } catch (e) {
+        console.error('Failed to load page content:', e)
+        // Fallback to empty content on error
         editor.commands.setContent('')
       }
-
-      // Clear history so undo doesn't go back to empty
-      editor.commands.focus('start')
-
-      setTimeout(() => {
-        extractHeadings()
-      }, 100)
-    } catch (e) {
-      console.error('Failed to load page content:', e)
-    }
+    }, 0)
   }, [currentPageId, editor]) // REMOVED 'pages' dependency to prevent feedback loop
 
 
@@ -997,7 +1006,12 @@ export default function NotionEditor() {
       updatedAt: Date.now(),
     }
 
-    setPages(prevPages => [...prevPages, newPage])
+    setPages(prevPages => {
+      const updatedPages = [...prevPages, newPage]
+      saveToLocalStorage(updatedPages)
+      debouncedDriveSync(updatedPages)
+      return updatedPages
+    })
     setCurrentPageId(newPage.id)
   }
 
@@ -1016,6 +1030,9 @@ export default function NotionEditor() {
         setCurrentPageId(newPages[0].id)
       }
 
+      saveToLocalStorage(newPages)
+      debouncedDriveSync(newPages)
+
       return newPages
     })
   }
@@ -1023,13 +1040,20 @@ export default function NotionEditor() {
   // Handle page title change
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value
-    setPages(prevPages =>
-      prevPages.map(page =>
+
+    setPages(prevPages => {
+      const updatedPages = prevPages.map(page =>
         page.id === currentPageId
           ? { ...page, title: newTitle, updatedAt: Date.now() }
           : page
       )
-    )
+
+      // Trigger side effects
+      saveToLocalStorage(updatedPages)
+      debouncedDriveSync(updatedPages)
+
+      return updatedPages
+    })
   }
 
   // Handle TOC item click
@@ -1067,13 +1091,16 @@ export default function NotionEditor() {
   const handleClear = () => {
     if (confirm('Are you sure you want to clear all content? This cannot be undone.')) {
       editor?.commands.clearContent()
-      setPages(prevPages =>
-        prevPages.map(page =>
+      setPages(prevPages => {
+        const updatedPages = prevPages.map(page =>
           page.id === currentPageId
             ? { ...page, content: '', updatedAt: Date.now() }
             : page
         )
-      )
+        saveToLocalStorage(updatedPages)
+        debouncedDriveSync(updatedPages)
+        return updatedPages
+      })
     }
   }
 
