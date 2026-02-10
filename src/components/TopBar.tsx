@@ -2,7 +2,7 @@
 import { AlertCircle, Check, Cloud, FileDown, List, Loader, Menu, Trash2, Upload } from 'lucide-react'
 import React, { useRef } from 'react'
 
-type SyncStatus = 'idle' | 'saving' | 'synced' | 'error'
+import { SyncStatus } from '@/types'
 
 interface TopBarProps {
     sidebarOpen: boolean

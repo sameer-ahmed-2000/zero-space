@@ -12,3 +12,6 @@ export interface Page {
     createdAt: number
     updatedAt: number
 }
+
+export type SyncStatus = 'idle' | 'saving' | 'synced' | 'error'
+
