@@ -1,5 +1,17 @@
-import { BubbleMenu, FloatingMenu } from '@tiptap/react'
-import { Bold, Code, CodeSquare, Heading1, Heading2, Heading3, Italic, List, ListOrdered, Strikethrough } from 'lucide-react'
+
+import { BubbleMenu } from '@tiptap/react'
+import {
+    Bold,
+    // Code icon removed
+    CodeSquare,
+    Heading1,
+    Heading2,
+    Italic,
+    Link as LinkIcon,
+    Strikethrough,
+    Underline as UnderlineIcon
+} from 'lucide-react'
+import { useCallback } from 'react'
 
 interface EditorMenusProps {
     editor: any
@@ -8,91 +20,103 @@ interface EditorMenusProps {
 export default function EditorMenus({ editor }: EditorMenusProps) {
     if (!editor) return null
 
-    return (
-        <>
-            <BubbleMenu
-                editor={editor}
-                tippyOptions={{ duration: 100 }}
-                className="bubble-menu"
-            >
-                <button
-                    onClick={() => editor.chain().focus().toggleBold().run()}
-                    className={editor.isActive('bold') ? 'is-active' : ''}
-                    title="Bold"
-                >
-                    <Bold size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                    className={editor.isActive('italic') ? 'is-active' : ''}
-                    title="Italic"
-                >
-                    <Italic size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleStrike().run()}
-                    className={editor.isActive('strike') ? 'is-active' : ''}
-                    title="Strikethrough"
-                >
-                    <Strikethrough size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleCode().run()}
-                    className={editor.isActive('code') ? 'is-active' : ''}
-                    title="Code"
-                >
-                    <Code size={16} />
-                </button>
-            </BubbleMenu>
+    const setLink = useCallback(() => {
+        const previousUrl = editor.getAttributes('link').href
+        const url = window.prompt('URL', previousUrl)
 
-            <FloatingMenu
-                editor={editor}
-                tippyOptions={{ duration: 100 }}
-                className="floating-menu"
-            >
-                <button
-                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                    className={editor.isActive('heading', { level: 1 }) ? 'is-active' : ''}
-                    title="Heading 1"
-                >
-                    <Heading1 size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                    className={editor.isActive('heading', { level: 2 }) ? 'is-active' : ''}
-                    title="Heading 2"
-                >
-                    <Heading2 size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                    className={editor.isActive('heading', { level: 3 }) ? 'is-active' : ''}
-                    title="Heading 3"
-                >
-                    <Heading3 size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                    className={editor.isActive('bulletList') ? 'is-active' : ''}
-                    title="Bullet List"
-                >
-                    <List size={16} />
-                </button>
-                <button
-                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                    className={editor.isActive('orderedList') ? 'is-active' : ''}
-                    title="Numbered List"
-                >
-                    <ListOrdered size={16} />
-                </button>
-                <button
+        // cancelled
+        if (url === null) {
+            return
+        }
+
+        // empty
+        if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run()
+            return
+        }
+
+        // update
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }, [editor])
+
+    return (
+        <BubbleMenu
+            editor={editor}
+            tippyOptions={{ duration: 200, animation: 'shift-away', placement: 'top' }}
+            className="flex items-center overflow-hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200/50 dark:border-zinc-800/50 divide-x divide-gray-200/50 dark:divide-zinc-800/50 ring-1 ring-black/5"
+        >
+            <div className="flex items-center px-1 py-1 gap-1">
+                {/* Formatting Group */}
+                <MenuButton
+                    isActive={editor.isActive('bold')}
+                    onClick={() => editor.chain().focus().toggleBold().run()}
+                    icon={Bold}
+                    label="Bold"
+                />
+                <MenuButton
+                    isActive={editor.isActive('italic')}
+                    onClick={() => editor.chain().focus().toggleItalic().run()}
+                    icon={Italic}
+                    label="Italic"
+                />
+                <MenuButton
+                    isActive={editor.isActive('underline')}
+                    onClick={() => editor.chain().focus().toggleUnderline().run()}
+                    icon={UnderlineIcon}
+                    label="Underline"
+                />
+                <MenuButton
+                    isActive={editor.isActive('strike')}
+                    onClick={() => editor.chain().focus().toggleStrike().run()}
+                    icon={Strikethrough}
+                    label="Strike"
+                />
+                <MenuButton
+                    isActive={editor.isActive('codeBlock')}
                     onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                    className={editor.isActive('codeBlock') ? 'is-active' : ''}
-                    title="Code Block"
-                >
-                    <CodeSquare size={16} />
-                </button>
-            </FloatingMenu>
-        </>
+                    icon={CodeSquare}
+                    label="Code Block"
+                />
+            </div>
+
+            <div className="flex items-center px-1">
+                <MenuButton
+                    isActive={editor.isActive('link')}
+                    onClick={setLink}
+                    icon={LinkIcon}
+                    label="Link"
+                />
+            </div>
+
+            <div className="flex items-center px-1">
+                <MenuButton
+                    isActive={editor.isActive('heading', { level: 1 })}
+                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                    icon={Heading1}
+                    label="H1"
+                />
+                <MenuButton
+                    isActive={editor.isActive('heading', { level: 2 })}
+                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                    icon={Heading2}
+                    label="H2"
+                />
+            </div>
+        </BubbleMenu>
+    )
+}
+
+function MenuButton({ isActive, onClick, icon: Icon, label }: any) {
+    return (
+        <button
+            onClick={onClick}
+            className={`p-1.5 min-w-[28px] flex items-center justify-center rounded-md text-sm transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 ${isActive
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+            title={label}
+        >
+            <Icon size={16} />
+        </button>
     )
 }

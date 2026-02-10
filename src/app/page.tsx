@@ -2,7 +2,9 @@
 
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Heading from '@tiptap/extension-heading'
+import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import Underline from '@tiptap/extension-underline'
 import { EditorContent, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { common, createLowlight } from 'lowlight'
@@ -16,6 +18,7 @@ import EditorMenus from '../components/EditorMenus'
 import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
+import { SlashCommand, suggestion } from '../extensions/slash-command'
 import { Page, TocItem } from '../types'
 import * as GoogleDrive from '../utils/googleDrive'
 import { runWhenIdle } from '../utils/idle'
@@ -576,6 +579,13 @@ export default function NotionEditor() {
       }).configure({
         lowlight,
         defaultLanguage: 'javascript',
+      }),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+      }),
+      SlashCommand.configure({
+        suggestion,
       }),
     ],
     content: '',
