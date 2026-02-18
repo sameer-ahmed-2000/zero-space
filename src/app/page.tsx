@@ -630,20 +630,10 @@ export default function NotionEditor() {
                 // 2️⃣ Disable history (huge perf win)
                 editor.commands.setMeta('addToHistory', false)
 
-                // 3️⃣ Insert chunk-by-chunk
-                for (let i = 0; i < total; i++) {
-                  editor.commands.insertContent(nodes[i], {
-                    parseOptions: { preserveWhitespace: 'full' },
-                  })
-
-                  // 4️⃣ Progress update
-                  if (i % 5 === 0 || i === total - 1) {
-                    const percent = Math.round(((i + 1) / total) * 100)
-                    setProcessingProgress(percent)
-                    await yieldToMainThread()
-                  }
-                }
-
+                // 3️⃣ This avoids ProseMirror nesting issues entirely
+                editor.commands.setContent(json, false, {
+                  preserveWhitespace: 'full'
+                })
                 // 5️⃣ Re-enable history
                 editor.commands.setMeta('addToHistory', true)
 
