@@ -12,6 +12,7 @@ import {
     TextQuote
 } from 'lucide-react'
 import tippy from 'tippy.js'
+import 'tippy.js/dist/tippy.css'
 import SlashCommandList from '../components/SlashCommandList'
 
 const getSuggestionItems = ({ query }: { query: string }) => {

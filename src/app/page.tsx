@@ -586,7 +586,7 @@ export default function NotionEditor() {
       }),
       SlashCommand.configure({
         suggestion,
-      }),
+      })
     ],
     content: '',
     editorProps: {
