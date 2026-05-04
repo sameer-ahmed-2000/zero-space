@@ -19,10 +19,13 @@ import Sidebar from '../components/Sidebar'
 import TableOfContents from '../components/TableOfContents'
 import TopBar from '../components/TopBar'
 import { SlashCommand, suggestion } from '../extensions/slash-command'
+import { SubPage } from '../extensions/sub-page'
 import { Page, TocItem } from '../types'
 import * as GoogleDrive from '../utils/googleDrive'
 import { runWhenIdle } from '../utils/idle'
 import { workerManager } from '../utils/workerManager'
+import Breadcrumbs from '../components/Breadcrumbs'
+import SubPageList from '../components/SubPageList'
 
 // Google Drive API types
 declare global {
@@ -281,6 +284,11 @@ export default function NotionEditor() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [userEmail, setUserEmail] = useState<string>('')
   const [gapiInitialized, setGapiInitialized] = useState(false)
+  const currentPageIdRef = useRef<string>(currentPageId)
+
+  useEffect(() => {
+    currentPageIdRef.current = currentPageId
+  }, [currentPageId])
 
   const editorRef = useRef<any>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
@@ -583,6 +591,51 @@ export default function NotionEditor() {
       Underline,
       Link.configure({
         openOnClick: false,
+      }),
+      SubPage.extend({
+        addCommands() {
+          return {
+            ...this.parent?.(),
+            createSubPage: (range: any) => ({ chain }: any) => {
+              const id = generateId()
+              const title = 'Untitled'
+              const parentId = currentPageIdRef.current
+
+              // 1. Defer the React state updates
+              setTimeout(() => {
+                const newPage: Page = {
+                  id,
+                  title,
+                  icon: '',
+                  content: '',
+                  parentId,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                }
+
+                setPages(prevPages => {
+                  const updatedPages = [...prevPages, newPage]
+                  saveToLocalStorage(updatedPages)
+                  debouncedDriveSync(updatedPages)
+                  return updatedPages
+                })
+
+                setCurrentPageId(id)
+              }, 50)
+
+              // 2. Return the command chain
+              // We remove .run() and .focus() here to make it chainable 
+              // and avoid mismatched transaction errors.
+              return chain()
+                .deleteRange(range)
+                .insertSubPage({ id, title })
+            },
+          }
+        },
+      }).configure({
+        onNavigate: (id: string) => {
+          setCurrentPageId(id)
+        },
       }),
       SlashCommand.configure({
         suggestion,
@@ -996,12 +1049,13 @@ export default function NotionEditor() {
   }, [tocItems])
 
   // Handle new page creation
-  const handleNewPage = () => {
+  const handleNewPage = (parentId?: string, shouldNavigate = true) => {
     const newPage: Page = {
       id: generateId(),
       title: 'Untitled',
       icon: '',
       content: '',
+      parentId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
@@ -1012,7 +1066,12 @@ export default function NotionEditor() {
       debouncedDriveSync(updatedPages)
       return updatedPages
     })
-    setCurrentPageId(newPage.id)
+
+    if (shouldNavigate) {
+      setCurrentPageId(newPage.id)
+    }
+
+    return newPage
   }
 
   // Handle page selection
@@ -1020,14 +1079,52 @@ export default function NotionEditor() {
     setCurrentPageId(pageId)
   }
 
-  // Handle page deletion
+  // Handle page deletion (Recursive)
   const handleDeletePage = (pageId: string) => {
     setPages(prevPages => {
-      const newPages = prevPages.filter(p => p.id !== pageId)
+      const idsToDelete = new Set<string>()
+      
+      // Helper to find all descendants
+      const collectIds = (id: string) => {
+        idsToDelete.add(id)
+        prevPages.forEach(p => {
+          if (p.parentId === id) {
+            collectIds(p.id)
+          }
+        })
+      }
+      
+      collectIds(pageId)
+      
+      const newPages = prevPages.filter(p => !idsToDelete.has(p.id))
 
-      // If deleting current page, switch to another
-      if (pageId === currentPageId && newPages.length > 0) {
-        setCurrentPageId(newPages[0].id)
+      // If current page or its parent was deleted, switch to another page
+      if (idsToDelete.has(currentPageId)) {
+        const deletedPage = prevPages.find(p => p.id === pageId)
+        const parentId = deletedPage?.parentId
+
+        if (parentId && newPages.some(p => p.id === parentId)) {
+          // Redirect to parent if it exists
+          setCurrentPageId(parentId)
+        } else if (newPages.length > 0) {
+          // Otherwise fall back to the first available page
+          setCurrentPageId(newPages[0].id)
+        } else {
+          // If everything was deleted, create a new initial page
+          const initialPage: Page = {
+            id: generateId(),
+            title: 'Untitled',
+            icon: '',
+            content: '',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          setCurrentPageId(initialPage.id)
+          const finalPages = [initialPage]
+          saveToLocalStorage(finalPages)
+          debouncedDriveSync(finalPages)
+          return finalPages
+        }
       }
 
       saveToLocalStorage(newPages)
@@ -1189,6 +1286,12 @@ export default function NotionEditor() {
         {/* Editor Container */}
         <div className="editor-wrapper" ref={editorWrapperRef}>
           <div className="editor-container">
+            <Breadcrumbs 
+              pages={pages} 
+              currentPageId={currentPageId} 
+              onPageSelect={handlePageSelect} 
+            />
+            
             {/* Page Icon & Title */}
             <div className="page-header">
               {currentPage?.icon && <div className="page-icon">{currentPage.icon}</div>}
@@ -1200,6 +1303,13 @@ export default function NotionEditor() {
                 onChange={handleTitleChange}
               />
             </div>
+
+            <SubPageList 
+              pages={pages} 
+              currentPageId={currentPageId} 
+              onPageSelect={handlePageSelect} 
+              onNewPage={handleNewPage}
+            />
 
             <EditorMenus editor={editor} />
             <EditorContent editor={editor} />

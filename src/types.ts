@@ -9,6 +9,7 @@ export interface Page {
     title: string
     icon: string
     content: string
+    parentId?: string
     createdAt: number
     updatedAt: number
 }

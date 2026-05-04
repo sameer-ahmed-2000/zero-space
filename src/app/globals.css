@@ -1421,3 +1421,58 @@ body {
   background: #4f46e5;
   transition: width 0.15s linear;
 }
+/* ==================== Breadcrumbs ==================== */
+.breadcrumbs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  padding: 4px 0;
+}
+
+.breadcrumbs-nav::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.breadcrumb-btn {
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+  transition: all 0.2s ease;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.breadcrumb-btn.active {
+  color: var(--text-primary);
+  font-weight: 500;
+  background: var(--bg-tertiary);
+}
+
+.breadcrumb-separator {
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+}

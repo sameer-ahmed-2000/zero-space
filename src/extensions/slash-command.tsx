@@ -9,7 +9,8 @@ import {
     Heading3,
     List,
     ListOrdered,
-    TextQuote
+    TextQuote,
+    FileText
 } from 'lucide-react'
 import tippy from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
@@ -78,6 +79,17 @@ const getSuggestionItems = ({ query }: { query: string }) => {
             icon: CodeSquare,
             command: ({ editor, range }: any) => {
                 editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+            },
+        },
+        {
+            title: 'Page',
+            description: 'Create a new sub-page',
+            searchTerms: ['page', 'subpage', 'nest'],
+            icon: FileText,
+            command: ({ editor, range }: any) => {
+                if (editor.commands.createSubPage) {
+                    editor.chain().focus().createSubPage(range).run()
+                }
             },
         },
     ].filter(item => {
